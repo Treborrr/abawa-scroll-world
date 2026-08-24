@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Abawa — From Amazonas to the bar</title>
+<link rel="icon" type="image/webp" href="assets/brand/abawa-mark-marron.webp">
+<style>
+  @font-face {
+    font-family: 'Restora Neue';
+    src: url('assets/fonts/RestoraNeue-Regular.otf') format('opentype');
+    font-weight: 400; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Restora Neue';
+    src: url('assets/fonts/RestoraNeue-Bold.otf') format('opentype');
+    font-weight: 700; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Oxygen';
+    src: url('assets/fonts/Oxygen-Regular.ttf') format('truetype');
+    font-weight: 400; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Oxygen';
+    src: url('assets/fonts/Oxygen-Light.ttf') format('truetype');
+    font-weight: 300; font-display: swap;
+  }
+  :root, .sw-root {
+    --sw-bg: #f0ebe3;          /* crema Abawa — igual al fondo de los renders */
+    --sw-ink: #49403b;         /* marrón Abawa */
+    --sw-ink-soft: #6f655e;
+    --sw-accent: #9a8555;      /* oro Abawa */
+    --sw-font-display: 'Restora Neue', serif;
+    --sw-font-body: 'Oxygen', sans-serif;
+  }
+  html, body { margin: 0; background: #f0ebe3; }
+
+  /* Tableta real de Abawa levitando sobre la mesa de mármol (escena final).
+     El wrapper maneja la entrada (fade + scale); la imagen flota en bucle y la
+     sombra elíptica respira a contratiempo — sube la tableta, se encoge la sombra. */
+  #abawa-product {
+    position: fixed; left: 61%; top: 51%;
+    width: min(17vw, 235px);
+    transform: translate(-50%, -50%) scale(.92);
+    opacity: 0; pointer-events: none; z-index: 40;
+    transition: opacity .6s ease, transform .8s cubic-bezier(.22, 1, .36, 1);
+  }
+  #abawa-product.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+
+  #abawa-product img {
+    display: block; width: 100%;
+    filter: drop-shadow(0 10px 16px rgba(73, 64, 59, .28));
+    animation: abawa-float 6s ease-in-out infinite;
+  }
+  #abawa-product::after {
+    content: ''; position: absolute;
+    left: 50%; bottom: -7%;
+    width: 72%; height: 7%;
+    transform: translateX(-50%);
+    background: radial-gradient(ellipse closest-side, rgba(73, 64, 59, .38), rgba(73, 64, 59, 0) 70%);
+    animation: abawa-shadow 6s ease-in-out infinite;
+  }
+  @keyframes abawa-float {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-16px); }
+  }
+  @keyframes abawa-shadow {
+    0%, 100% { transform: translateX(-50%) scale(1);   opacity: 1;  }
+    50%      { transform: translateX(-50%) scale(.82); opacity: .55; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #abawa-product img, #abawa-product::after { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div id="world"></div>
+  <div id="abawa-product">
+    <img src="assets/tableta.png" alt="Tableta Abawa"
+         onerror="this.parentElement.remove()">
+  </div>
+
+  <script src="scrub-engine.js"></script>
+  <script>
+    mountScrollWorld(document.getElementById('world'), {
+      brand: { name: 'Abawa', href: '#top', logo: 'assets/brand/abawa-horizontal.webp' },
+      hint: 'desliza para volar',
+      diveScroll: 1.3,
+      connScroll: 0.9,
+      sections: [
+        { id: 'cosecha', label: 'Cosecha',
+          still: 'assets/poster_1.jpg', clip: 'assets/vid/dive_1.mp4',
+          scroll: 1.6, linger: 0.4, accent: '#9a8555',
+          eyebrow: 'Desde Amazonas', title: 'Todo empieza en el árbol.',
+          body: 'Cacao nativo, cosechado a mano por mujeres awajún que conocen cada árbol.',
+          tags: ['Cacao nativo', 'Cosecha a mano'] },
+        { id: 'apertura', label: 'Apertura',
+          still: 'assets/poster_2.jpg', clip: 'assets/vid/dive_2.mp4',
+          accent: '#49403b',
+          eyebrow: 'El fruto', title: 'Semillas blancas, promesa de sabor.',
+          body: 'Cada mazorca se abre a mano y sus semillas viajan en yute, como siempre se ha hecho.',
+          tags: ['Micro-lotes'] },
+        { id: 'camino', label: 'El camino',
+          still: 'assets/poster_3.jpg', clip: 'assets/vid/dive_3.mp4',
+          scroll: 1.6, linger: 0.45, accent: '#8fae8a',
+          eyebrow: 'Trazabilidad real', title: 'Del árbol al pueblo.',
+          body: 'No hay atajos: el cacao cruza el río como lo ha hecho por generaciones.',
+          tags: ['Origen único', 'Comercio directo'] },
+        { id: 'fermentacion', label: 'Fermentación',
+          still: 'assets/poster_4.jpg', clip: 'assets/vid/dive_4.mp4',
+          accent: '#9a8555',
+          eyebrow: 'El secreto del sabor', title: 'Aquí nace el aroma.',
+          body: 'En cajones de madera, bajo tela de yute, el tiempo convierte la semilla en sabor.',
+          tags: ['Fermentación artesanal'] },
+        { id: 'tueste', label: 'Tueste',
+          still: 'assets/poster_5.jpg', clip: 'assets/vid/dive_5.mp4',
+          accent: '#49403b',
+          eyebrow: 'Fuego suave', title: 'El punto exacto.',
+          body: 'Tostado lento en tambor de barro, para que el origen se escuche en cada nota.',
+          tags: ['Tueste artesanal'] },
+        { id: 'taller', label: 'Taller',
+          still: 'assets/poster_6.jpg', clip: 'assets/vid/dive_6.mp4',
+          accent: '#9a8555',
+          eyebrow: 'Hecho a mano', title: 'Piedra, tiempo y paciencia.',
+          body: 'Molienda en piedra y temperado a mano, micro-lote a micro-lote.',
+          tags: ['Bean to bar'] },
+        { id: 'abawa', label: 'Abawa',
+          still: 'assets/poster_7.jpg', clip: 'assets/vid/dive_7.mp4',
+          scroll: 1.8, linger: 0.5, accent: '#49403b',
+          eyebrow: 'From Amazonas to the bar', title: 'Un gesto de reconocimiento.',
+          body: 'Chocolate fino de aroma que honra a quienes lo cultivan.',
+          cta: { primary: { label: 'Descubre la cosecha', href: '#' },
+                 secondary: { label: 'Nuestra historia', href: '#' } } },
+      ],
+      connectors: [
+        'assets/vid/conn_1.mp4',
+        'assets/vid/conn_2.mp4',
+        'assets/vid/conn_3.mp4',
+        'assets/vid/conn_4.mp4',
+        'assets/vid/conn_5.mp4',
+        'assets/vid/conn_6.mp4',
+      ],
+    });
+
+    // La tableta real aparece cuando el vuelo aterriza en la mesa de mármol:
+    // fade-in durante el último tramo de scroll de la página.
+    (function () {
+      const img = document.getElementById('abawa-product');
+      if (!img) return;
+      function onScroll() {
+        if (!document.body.contains(img)) { removeEventListener('scroll', onScroll); return; }
+        const max = document.documentElement.scrollHeight - innerHeight;
+        const frac = max > 0 ? scrollY / max : 0;
+        img.classList.toggle('visible', frac > 0.965);
+      }
+      addEventListener('scroll', onScroll, { passive: true });
+      onScroll();
+    })();
+  </script>
+</body>
+</html>
