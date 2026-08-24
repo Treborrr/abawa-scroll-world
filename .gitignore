@@ -1,0 +1,8 @@
+.DS_Store
+# Manual de marca y fuentes con licencia — no redistribuir
+Branding ABAWA/
+# Crudos intermedios regenerables (los scripts y prompts sí se versionan)
+build/video/*.mp4
+build/video/*.png
+build/video/*.jpg
+build/stills/*.png
