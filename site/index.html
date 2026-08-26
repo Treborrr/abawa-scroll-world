@@ -8,22 +8,26 @@
 <style>
   @font-face {
     font-family: 'Restora Neue';
-    src: url('assets/fonts/RestoraNeue-Regular.otf') format('opentype');
+    src: url('assets/fonts/RestoraNeue-Regular.woff2') format('woff2'),
+         url('assets/fonts/RestoraNeue-Regular.otf') format('opentype');
     font-weight: 400; font-display: swap;
   }
   @font-face {
     font-family: 'Restora Neue';
-    src: url('assets/fonts/RestoraNeue-Bold.otf') format('opentype');
+    src: url('assets/fonts/RestoraNeue-Bold.woff2') format('woff2'),
+         url('assets/fonts/RestoraNeue-Bold.otf') format('opentype');
     font-weight: 700; font-display: swap;
   }
   @font-face {
     font-family: 'Oxygen';
-    src: url('assets/fonts/Oxygen-Regular.ttf') format('truetype');
+    src: url('assets/fonts/Oxygen-Regular.woff2') format('woff2'),
+         url('assets/fonts/Oxygen-Regular.ttf') format('truetype');
     font-weight: 400; font-display: swap;
   }
   @font-face {
     font-family: 'Oxygen';
-    src: url('assets/fonts/Oxygen-Light.ttf') format('truetype');
+    src: url('assets/fonts/Oxygen-Light.woff2') format('woff2'),
+         url('assets/fonts/Oxygen-Light.ttf') format('truetype');
     font-weight: 300; font-display: swap;
   }
   :root, .sw-root {
@@ -36,50 +40,84 @@
   }
   html, body { margin: 0; background: #f0ebe3; }
 
-  /* Tableta real de Abawa levitando sobre la mesa de mármol (escena final).
-     El wrapper maneja la entrada (fade + scale); la imagen flota en bucle y la
-     sombra elíptica respira a contratiempo — sube la tableta, se encoge la sombra. */
-  #abawa-product {
-    position: fixed; left: 61%; top: 51%;
-    width: min(17vw, 235px);
-    transform: translate(-50%, -50%) scale(.92);
-    opacity: 0; pointer-events: none; z-index: 40;
-    transition: opacity .6s ease, transform .8s cubic-bezier(.22, 1, .36, 1);
-  }
-  #abawa-product.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  /* Fuera las partículas de "atmósfera" del motor (los puntitos/anillos que
+     derivan por la pantalla). Esta regla va sin @layer, así que le gana al
+     CSS del motor (que vive en @layer sw) sin necesidad de !important. */
+  .sw-pt { display: none; }
 
-  #abawa-product img {
-    display: block; width: 100%;
-    filter: drop-shadow(0 10px 16px rgba(73, 64, 59, .28));
-    animation: abawa-float 6s ease-in-out infinite;
+  /* El velo crema de la izquierda (fondo de legibilidad de los textos del
+     motor) se retira en la escena final del cacao: ahí no hay copy y lavaba
+     el render y el splash. La clase la pone el script del reveal. */
+  .sw-copylayer::before { transition: opacity .5s ease; }
+  body.abawa-endgame .sw-copylayer::before { opacity: 0; }
+
+  /* Reveal final: splash de chocolate + cacaos generado a partir de la
+     tableta real (fal.ai, gpt-image-2/edit + Kling O3, frame-locked desde el
+     último cuadro de dive_7). Cubre la pantalla igual que las escenas del
+     motor (mismo object-position) para que el empalme con dive_7 no salte.
+     Se reproduce UNA vez al llegar; al terminar el <video> queda pausado en
+     su último cuadro y un shimmer de luz muy sutil le da vida perpetua sin
+     depender de que la persona siga scrolleando. */
+  /* z-25: por encima del copylayer del motor (z-20, cuyo velo lavaba el
+     lado izquierdo del splash) y por debajo del panel de cierre (z-30). */
+  #abawa-reveal {
+    position: fixed; inset: 0; z-index: 25; pointer-events: none;
+    opacity: 0; transition: opacity .6s ease;
   }
-  #abawa-product::after {
-    content: ''; position: absolute;
-    left: 50%; bottom: -7%;
-    width: 72%; height: 7%;
-    transform: translateX(-50%);
-    background: radial-gradient(ellipse closest-side, rgba(73, 64, 59, .38), rgba(73, 64, 59, 0) 70%);
-    animation: abawa-shadow 6s ease-in-out infinite;
+  #abawa-reveal.visible { opacity: 1; }
+  #abawa-reveal video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: center 42%;
   }
-  @keyframes abawa-float {
-    0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-16px); }
+  /* Clickeable solo una vez visible — antes no hay nada que tocar. Click
+     reinicia el splash desde cero (ver JS), útil para volver a verlo. */
+  #abawa-reveal.visible video { pointer-events: auto; cursor: pointer; }
+  #abawa-reveal video.is-settled { animation: abawa-shimmer 7s ease-in-out infinite; }
+  @keyframes abawa-shimmer {
+    0%, 100% { filter: brightness(1) saturate(1); transform: scale(1); }
+    50%      { filter: brightness(1.035) saturate(1.05); transform: scale(1.006); }
   }
-  @keyframes abawa-shadow {
-    0%, 100% { transform: translateX(-50%) scale(1);   opacity: 1;  }
-    50%      { transform: translateX(-50%) scale(.82); opacity: .55; }
+  @media (max-width: 860px) and (orientation: portrait) {
+    #abawa-reveal video { object-position: center 44%; }
   }
   @media (prefers-reduced-motion: reduce) {
-    #abawa-product img, #abawa-product::after { animation: none; }
+    #abawa-reveal video.is-settled { animation: none; }
+  }
+
+  /* Tramo de apreciación tras la pausa forzada: 1.5 pantallas de scroll
+     entre el final del vuelo y el panel de cierre, con el splash asentado
+     respirando (shimmer) todo el tramo. Ojo con las unidades: 60vh era 0.6
+     pantallas, no 60 — por eso el panel tapaba el splash casi al instante. */
+  #abawa-hold { height: 150vh; }
+
+  /* Panel de cierre: página 9 del manual (logotipo sobre foto de mazorcas).
+     Fluye después del film — al seguir bajando tras la tableta, sube y cubre
+     la escena (z-30 > capas fijas del motor). */
+  #abawa-final {
+    position: relative; z-index: 30;
+    height: 100vh; height: 100dvh;
+    background: #4a4035;
+  }
+  #abawa-final img {
+    display: block; width: 100%; height: 100%;
+    object-fit: cover;
   }
 </style>
 </head>
 <body>
   <div id="world"></div>
-  <div id="abawa-product">
-    <img src="assets/tableta.png" alt="Tableta Abawa"
-         onerror="this.parentElement.remove()">
+
+  <div id="abawa-reveal" aria-hidden="true">
+    <video poster="assets/final_reveal_poster.webp"
+           muted playsinline preload="auto"
+           onerror="this.parentElement.remove()"></video>
   </div>
+
+  <div id="abawa-hold" aria-hidden="true"></div>
+
+  <section id="abawa-final">
+    <img src="assets/manual-p9.webp" alt="Abawa — chocolate fino de aroma">
+  </section>
 
   <script src="scrub-engine.js"></script>
   <script>
@@ -88,50 +126,47 @@
       hint: 'desliza para volar',
       diveScroll: 1.3,
       connScroll: 0.9,
+      controls: { play: 'Reproducir', skip: 'ABAWA' },
       sections: [
         { id: 'cosecha', label: 'Cosecha',
-          still: 'assets/poster_1.jpg', clip: 'assets/vid/dive_1.mp4',
+          still: 'assets/poster_1.webp', clip: 'assets/vid/dive_1.mp4', clipMobile: 'assets/vid/dive_1_m.mp4',
           scroll: 1.6, linger: 0.4, accent: '#9a8555',
           eyebrow: 'Desde Amazonas', title: 'Todo empieza en el árbol.',
           body: 'Cacao nativo, cosechado a mano por mujeres awajún que conocen cada árbol.',
           tags: ['Cacao nativo', 'Cosecha a mano'] },
         { id: 'apertura', label: 'Apertura',
-          still: 'assets/poster_2.jpg', clip: 'assets/vid/dive_2.mp4',
+          still: 'assets/poster_2.webp', clip: 'assets/vid/dive_2.mp4', clipMobile: 'assets/vid/dive_2_m.mp4',
           accent: '#49403b',
           eyebrow: 'El fruto', title: 'Semillas blancas, promesa de sabor.',
           body: 'Cada mazorca se abre a mano y sus semillas viajan en yute, como siempre se ha hecho.',
           tags: ['Micro-lotes'] },
         { id: 'camino', label: 'El camino',
-          still: 'assets/poster_3.jpg', clip: 'assets/vid/dive_3.mp4',
+          still: 'assets/poster_3.webp', clip: 'assets/vid/dive_3.mp4', clipMobile: 'assets/vid/dive_3_m.mp4',
           scroll: 1.6, linger: 0.45, accent: '#8fae8a',
           eyebrow: 'Trazabilidad real', title: 'Del árbol al pueblo.',
           body: 'No hay atajos: el cacao cruza el río como lo ha hecho por generaciones.',
           tags: ['Origen único', 'Comercio directo'] },
         { id: 'fermentacion', label: 'Fermentación',
-          still: 'assets/poster_4.jpg', clip: 'assets/vid/dive_4.mp4',
+          still: 'assets/poster_4.webp', clip: 'assets/vid/dive_4.mp4', clipMobile: 'assets/vid/dive_4_m.mp4',
           accent: '#9a8555',
           eyebrow: 'El secreto del sabor', title: 'Aquí nace el aroma.',
           body: 'En cajones de madera, bajo tela de yute, el tiempo convierte la semilla en sabor.',
           tags: ['Fermentación artesanal'] },
         { id: 'tueste', label: 'Tueste',
-          still: 'assets/poster_5.jpg', clip: 'assets/vid/dive_5.mp4',
+          still: 'assets/poster_5.webp', clip: 'assets/vid/dive_5.mp4', clipMobile: 'assets/vid/dive_5_m.mp4',
           accent: '#49403b',
           eyebrow: 'Fuego suave', title: 'El punto exacto.',
           body: 'Tostado lento en tambor de barro, para que el origen se escuche en cada nota.',
           tags: ['Tueste artesanal'] },
         { id: 'taller', label: 'Taller',
-          still: 'assets/poster_6.jpg', clip: 'assets/vid/dive_6.mp4',
+          still: 'assets/poster_6.webp', clip: 'assets/vid/dive_6.mp4', clipMobile: 'assets/vid/dive_6_m.mp4',
           accent: '#9a8555',
           eyebrow: 'Hecho a mano', title: 'Piedra, tiempo y paciencia.',
           body: 'Molienda en piedra y temperado a mano, micro-lote a micro-lote.',
           tags: ['Bean to bar'] },
         { id: 'abawa', label: 'Abawa',
-          still: 'assets/poster_7.jpg', clip: 'assets/vid/dive_7.mp4',
-          scroll: 1.8, linger: 0.5, accent: '#49403b',
-          eyebrow: 'From Amazonas to the bar', title: 'Un gesto de reconocimiento.',
-          body: 'Chocolate fino de aroma que honra a quienes lo cultivan.',
-          cta: { primary: { label: 'Descubre la cosecha', href: '#' },
-                 secondary: { label: 'Nuestra historia', href: '#' } } },
+          still: 'assets/poster_7.webp', clip: 'assets/vid/dive_7.mp4', clipMobile: 'assets/vid/dive_7_m.mp4',
+          scroll: 1.1, accent: '#49403b' },
       ],
       connectors: [
         'assets/vid/conn_1.mp4',
@@ -141,18 +176,88 @@
         'assets/vid/conn_5.mp4',
         'assets/vid/conn_6.mp4',
       ],
+      connectorsMobile: [
+        'assets/vid/conn_1_m.mp4',
+        'assets/vid/conn_2_m.mp4',
+        'assets/vid/conn_3_m.mp4',
+        'assets/vid/conn_4_m.mp4',
+        'assets/vid/conn_5_m.mp4',
+        'assets/vid/conn_6_m.mp4',
+      ],
     });
 
-    // La tableta real aparece cuando el vuelo aterriza en la mesa de mármol:
-    // fade-in durante el último tramo de scroll de la página.
+    // El splash final: al aterrizar en el mármol se reproduce UNA vez con el
+    // scroll bloqueado (pausa forzada: el clip entero + 2.5 s sobre el último
+    // cuadro, para que se aprecie la tableta) y recién ahí se libera; queda
+    // respirando con el shimmer durante el tramo de apreciación hasta que el
+    // panel de cierre lo cubre.
     (function () {
-      const img = document.getElementById('abawa-product');
-      if (!img) return;
+      const wrap = document.getElementById('abawa-reveal');
+      const video = wrap && wrap.querySelector('video');
+      if (!wrap || !video) return;
+      const finalPanel = document.getElementById('abawa-final');
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const isMobile = matchMedia('(hover: none) and (pointer: coarse)').matches ||
+        matchMedia('(max-width: 860px)').matches;
+      video.src = isMobile ? 'assets/vid/final_reveal_m.mp4' : 'assets/vid/final_reveal.mp4';
+      let started = false, locked = false, lockY = 0, unlockTimer = null;
+
+      function unlock() {
+        locked = false;
+        if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
+      }
+      video.addEventListener('ended', () => {
+        video.classList.add('is-settled');
+        // La pausa forzada se extiende 2.5 s sobre el último cuadro.
+        if (locked) { clearTimeout(unlockTimer); unlockTimer = setTimeout(unlock, 2500); }
+      });
+
+      // Click sobre la tableta/splash → repite la animación desde cero
+      // (solo clickeable una vez visible, ver CSS `.visible video`).
+      video.addEventListener('click', () => {
+        video.classList.remove('is-settled');
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      });
+
       function onScroll() {
-        if (!document.body.contains(img)) { removeEventListener('scroll', onScroll); return; }
-        const max = document.documentElement.scrollHeight - innerHeight;
-        const frac = max > 0 ? scrollY / max : 0;
-        img.classList.toggle('visible', frac > 0.965);
+        if (!document.body.contains(wrap)) { removeEventListener('scroll', onScroll); return; }
+        // Final real del vuelo, leído del track del motor (altura = totalW*vh
+        // + 1vh de gracia ⇒ borde inferior absoluto − 1 viewport = scrollY
+        // exacto donde dive_7 termina de asentarse). No usar #abawa-final de
+        // referencia (el hold lo corre hacia abajo) ni porcentajes del scroll
+        // total (bugs anteriores, ver git).
+        const track = document.querySelector('.sw-track');
+        const flightEnd = track
+          ? track.getBoundingClientRect().bottom + scrollY - innerHeight
+          : document.documentElement.scrollHeight - innerHeight;
+
+        // El velo de los textos se retira durante todo el último dive — la
+        // escena del cacao no lleva copy (1.8 = su `scroll` en la config).
+        document.body.classList.toggle('abawa-endgame', scrollY > flightEnd - 1.8 * innerHeight);
+
+        // Disparo: la PRIMERA vez que el scroll alcanza (o salta de largo) el
+        // final del vuelo. Sin condicionarlo al panel: un flick fuerte podía
+        // aterrizar con el panel ya asomando y el splash no arrancaba nunca
+        // (el bug del scroll manual).
+        if (!started && scrollY >= flightEnd - 0.1 * innerHeight) {
+          started = true;
+          video.play().catch(() => {});
+          if (!reduce) {
+            locked = true;
+            lockY = Math.round(flightEnd);
+            // Red de seguridad por si 'ended' nunca llega (clip que no carga).
+            unlockTimer = setTimeout(unlock, 12000);
+          }
+        }
+        // Pausa forzada: mientras dura, el scroll no pasa del final del vuelo
+        // (hacia arriba sí se puede salir; el lock no vuelve a activarse).
+        if (locked && scrollY > lockY) scrollTo(0, lockY);
+
+        const distFromEnd = (flightEnd - scrollY) / innerHeight;
+        const panelVisible = finalPanel &&
+          finalPanel.getBoundingClientRect().top < innerHeight;
+        wrap.classList.toggle('visible', started && distFromEnd < 0.1 && !panelVisible);
       }
       addEventListener('scroll', onScroll, { passive: true });
       onScroll();

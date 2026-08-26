@@ -6,3 +6,13 @@ build/video/*.mp4
 build/video/*.png
 build/video/*.jpg
 build/stills/*.png
+# Reveal final (splash): mismo criterio — scripts y prompts se versionan,
+# los PNG/JPG/MP4 intermedios (candidatos, contact sheets, frames de QA) no.
+# Los dos assets que sí se sirven ya están copiados en site/assets/.
+build/final/*.png
+build/final/*.jpg
+build/final/*.mp4
+build/final/frames/
+build/final/frames_v2/
+# Assets viejos reemplazados por webp/video — se archivan fuera de site/
+build/archived-superseded-assets/

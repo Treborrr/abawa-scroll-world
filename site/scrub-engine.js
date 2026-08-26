@@ -8,12 +8,20 @@
 
    USAGE
      mountScrollWorld(document.getElementById('world'), {
-       brand: { name: 'Pearl & Co.', href: '#top' },
+       brand: { name: 'Pearl & Co.', href: '#top', logo: 'brand/logo.svg' },  // logo image replaces
+                                                                               // the generic mark+name
        diveScroll: 1.3,   // viewport-heights of scroll per dive clip
        connScroll: 0.9,   // ...per connector clip
        hint: 'scroll to fly in',
        nav: true,         // show the top section nav
        atmosphere: true,  // subtle gradient + drifting particles behind the clips
+       controls: { play: 'Play', skip: 'Skip', speed: 0.28 },
+                          // optional — replaces the per-section pills in the top nav with
+                          // two buttons: a play/pause toggle that auto-scrolls the page at
+                          // `speed` viewport-heights/sec (any wheel/touch/key input
+                          // cancels it), and a text button that fast-scrolls to the end.
+                          // The side dot nav (route) is untouched either way.
+                          // Omit to keep the default per-section pill nav.
        sections: [
          { id, label, still, stillMobile, clip, clipMobile, accent,
            scroll: 1.6,   // optional per-section override of diveScroll — more scroll
@@ -134,6 +142,7 @@ function mountScrollWorld(container, config) {
   const stage = el('div', 'sw-stage');
   const copylayer = el('div', 'sw-copylayer');
   const route = el('div', 'sw-route');
+  const routeFill = el('div', 'sw-route__fill'); route.appendChild(routeFill);
   const hint = el('div', 'sw-hint');
   const hintText = el('span'); hintText.textContent = config.hint || 'scroll'; hint.appendChild(hintText);
   hint.appendChild(el('i'));
@@ -168,7 +177,7 @@ function mountScrollWorld(container, config) {
     dot.innerHTML = `<span class="sw-route__label">${esc(s.label || '')}</span><i></i>`;
     dot.addEventListener('click', () => jumpTo(i)); route.appendChild(dot); dots.push(dot);
 
-    if (config.nav !== false) {
+    if (config.nav !== false && !config.controls) {
       const b = el('button', 'sw-nav__item'); b.textContent = s.label || '';
       b.addEventListener('click', () => jumpTo(i)); nav.appendChild(b);
     }
@@ -184,6 +193,90 @@ function mountScrollWorld(container, config) {
   let vh = window.innerHeight, stageX = 0, totalW = 0, activeIndex = -1, ticking = false;
   let laidOutW = window.innerWidth;   // width the current layout was computed at (see onResize)
 
+  // ---- top-nav playback controls (opt-in via config.controls; replaces the pill nav) ----
+  if (config.controls && config.nav !== false) {
+    nav.classList.add('sw-nav--controls');
+    const playBtn = el('button', 'sw-nav__play');
+    playBtn.type = 'button';
+    playBtn.setAttribute('aria-label', config.controls.play || 'Play');
+    playBtn.appendChild(el('span', 'sw-nav__play-icon'));
+    playBtn.appendChild(el('span', 'sw-nav__pause-icon'));
+    nav.appendChild(playBtn);
+
+    const skipBtn = el('button', 'sw-nav__item');
+    skipBtn.type = 'button';
+    skipBtn.textContent = config.controls.skip || 'Skip';
+    nav.appendChild(skipBtn);
+
+    const AUTOPLAY_VH_S = config.controls.speed || 0.28;   // viewport-heights/sec — matched
+                                                            // to a ~5s clip covering a ~1.4vh segment
+    let autoplayId = null, autoplayLast = null, skipId = null;
+
+    function stopAutoplay() {
+      if (autoplayId != null) { cancelAnimationFrame(autoplayId); autoplayId = null; }
+      autoplayLast = null;
+      playBtn.classList.remove('is-playing');
+    }
+    function stopSkip() { if (skipId != null) { cancelAnimationFrame(skipId); skipId = null; } }
+    function stopAutoNav() { stopAutoplay(); stopSkip(); }
+
+    function stepAutoplay(now) {
+      if (autoplayLast == null) autoplayLast = now;
+      const dt = (now - autoplayLast) / 1000; autoplayLast = now;
+      const max = document.documentElement.scrollHeight - innerHeight;
+      if (window.scrollY >= max - 1) { stopAutoplay(); return; }
+      window.scrollBy(0, AUTOPLAY_VH_S * vh * dt);
+      autoplayId = requestAnimationFrame(stepAutoplay);
+    }
+    playBtn.addEventListener('click', () => {
+      if (autoplayId != null) { stopAutoplay(); return; }
+      stopSkip();
+      playBtn.classList.add('is-playing');
+      autoplayId = requestAnimationFrame(stepAutoplay);
+    });
+
+    // Fast-forwards to the end of the scroll-world flight itself (totalW * vh — not the
+    // full document, which may run on past the track into trailing static content the
+    // host page appended) over `dur` ms, eased — a quick flight rather than a jump cut —
+    // so whatever reveals as the flight lands (e.g. a product shot gated on scroll
+    // fraction) comes in the same way it would naturally.
+    function fastSkip() {
+      stopAutoNav();
+      const max = Math.min(totalW * vh, document.documentElement.scrollHeight - innerHeight);
+      const startY = window.scrollY, dist = max - startY;
+      if (dist <= 1) return;
+      if (reduce) { window.scrollTo(0, max); return; }
+      const dur = 1500, t0 = performance.now();
+      (function tick(now) {
+        const p = clamp((now - t0) / dur, 0, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        window.scrollTo(0, startY + dist * eased);
+        skipId = p < 1 ? requestAnimationFrame(tick) : null;
+      })(t0);
+    }
+    skipBtn.addEventListener('click', fastSkip);
+
+    // Any manual input hands control back to the user.
+    ['wheel', 'touchstart', 'keydown'].forEach(evt =>
+      window.addEventListener(evt, stopAutoNav, { passive: true }));
+  }
+
+  // The route rail's fill (progress line) is measured in real pixels off the
+  // actual dot layout rather than assumed CSS offsets, so it's exact
+  // whatever the gap/padding/dot size end up being at this viewport width.
+  let routeDotTop = 0, routeDotSpan = 0;
+  function measureRoute() {
+    if (!dots.length) return;
+    const top = dots[0].offsetTop + dots[0].offsetHeight / 2;
+    const bottom = dots[dots.length - 1].offsetTop + dots[dots.length - 1].offsetHeight / 2;
+    routeDotTop = top; routeDotSpan = bottom - top;
+    routeFill.style.top = top + 'px';
+  }
+  function updateRouteFill(near) {
+    const frac = dots.length > 1 ? near / (dots.length - 1) : 0;
+    routeFill.style.height = Math.max(0, routeDotSpan * frac) + 'px';
+  }
+
   function layout() {
     vh = window.innerHeight;
     laidOutW = window.innerWidth;
@@ -192,6 +285,7 @@ function mountScrollWorld(container, config) {
     SEGMENTS.forEach(s => { s.start = off * vh; off += s.w; s.end = off * vh; });
     totalW = off;
     track.style.height = (totalW * vh + vh) + 'px';   // +1vh so the last flight completes
+    measureRoute();
     read();
   }
 
@@ -266,7 +360,12 @@ function mountScrollWorld(container, config) {
     if (near !== activeIndex) {
       activeIndex = near;
       dots.forEach((d, k) => d.classList.toggle('is-active', k === near));
-      nav.querySelectorAll('.sw-nav__item').forEach((n, k) => n.classList.toggle('is-active', k === near));
+      updateRouteFill(near);
+      // In controls mode the lone .sw-nav__item is the "ABAWA" skip button, not a
+      // per-section pill — it has no scroll-position-based active state.
+      if (!config.controls) {
+        nav.querySelectorAll('.sw-nav__item').forEach((n, k) => n.classList.toggle('is-active', k === near));
+      }
       container.style.setProperty('--sw-accent', SECTIONS[near].accent || '');
     }
     scrollbarFill.style.transform = `scaleX(${clamp(y / (totalW * vh))})`;
@@ -380,7 +479,7 @@ function injectCSS() {
   .sw-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--sw-ink);}
   .sw-brand__mark{width:24px;height:28px;border-radius:7px 7px 10px 10px;background:linear-gradient(160deg,var(--sw-accent),color-mix(in srgb,var(--sw-accent) 60%,#000));box-shadow:0 6px 14px color-mix(in srgb,var(--sw-accent) 40%,transparent);}
   .sw-brand__name{font-family:var(--sw-font-display);font-weight:700;font-size:1.1rem;}
-  .sw-brand__logo{display:block;height:clamp(24px,3.2vw,34px);width:auto;}
+  .sw-brand__logo{display:block;height:clamp(19px,2.5vw,27px);width:auto;position:relative;top:5px;}
   .sw-nav{display:flex;gap:4px;padding:5px;background:color-mix(in srgb,#fff 55%,transparent);backdrop-filter:blur(10px);border:1px solid color-mix(in srgb,var(--sw-accent) 16%,transparent);border-radius:999px;}
   .sw-nav__item{font:inherit;font-size:.82rem;color:var(--sw-ink-soft);border:0;background:transparent;cursor:pointer;padding:7px 14px;border-radius:999px;transition:color .25s,background .25s;}
   .sw-nav__item:hover{color:var(--sw-ink);} .sw-nav__item.is-active{color:#fff;background:var(--sw-accent);}
@@ -402,13 +501,31 @@ function injectCSS() {
   .sw-btn--primary{color:#fff;background:var(--sw-ink);} .sw-btn--primary:hover{transform:translateY(-2px);}
   .sw-btn--ghost{color:var(--sw-ink);border:1.5px solid color-mix(in srgb,var(--sw-ink) 25%,transparent);} .sw-btn--ghost:hover{transform:translateY(-2px);}
   .sw-route{position:fixed;right:clamp(14px,2.4vw,30px);top:50%;z-index:40;transform:translateY(-50%);display:flex;flex-direction:column;gap:22px;padding:18px 10px;}
-  .sw-route::before{content:"";position:absolute;left:50%;top:22px;bottom:22px;width:2px;transform:translateX(-50%);background:var(--sw-accent);opacity:.28;}
-  .sw-route__dot{position:relative;border:0;background:transparent;cursor:pointer;width:14px;height:14px;display:grid;place-items:center;}
-  .sw-route__dot i{width:9px;height:9px;border-radius:50%;background:color-mix(in srgb,var(--sw-accent) 40%,transparent);transition:transform .3s,background .3s,box-shadow .3s;}
-  .sw-route__dot:hover i{transform:scale(1.25);background:var(--sw-accent);}
-  .sw-route__dot.is-active i{background:var(--sw-accent);transform:scale(1.4);box-shadow:0 0 0 5px color-mix(in srgb,var(--sw-accent) 22%,transparent);}
-  .sw-route__label{position:absolute;right:24px;top:50%;transform:translateY(-50%) translateX(6px);white-space:nowrap;font-size:.78rem;font-weight:600;color:var(--sw-ink);background:color-mix(in srgb,#fff 85%,transparent);backdrop-filter:blur(6px);padding:5px 11px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;border:1px solid color-mix(in srgb,var(--sw-accent) 14%,transparent);}
+  /* Riel neutro fijo (ni el color ni la línea dependen del accent de la
+     sección activa — eso hacía que todo el riel "parpadeara" de tono al
+     scrollear). .sw-route__fill es el tramo ya recorrido, medido en JS. */
+  .sw-route::before{content:"";position:absolute;left:50%;top:22px;bottom:22px;width:2px;transform:translateX(-50%);background:color-mix(in srgb,var(--sw-ink) 20%,transparent);border-radius:2px;}
+  .sw-route__fill{position:absolute;left:50%;top:22px;width:2px;height:0;transform:translateX(-50%);background:var(--sw-ink);opacity:.55;border-radius:2px;transition:height .5s cubic-bezier(.22,1,.36,1);pointer-events:none;}
+  .sw-route__dot{position:relative;border:0;background:transparent;cursor:pointer;width:16px;height:16px;display:grid;place-items:center;}
+  /* Relleno crema fijo (== fondo de página, no el accent variable) + anillo
+     de contorno: se mantiene legible sin importar qué haya detrás (selva,
+     río, mármol) en vez de mezclarse con la escena. */
+  .sw-route__dot i{width:9px;height:9px;border-radius:50%;background:var(--sw-bg);box-shadow:0 0 0 1.5px color-mix(in srgb,var(--sw-ink) 45%,transparent),0 1px 3px color-mix(in srgb,#000 20%,transparent);transition:transform .3s,background .3s,box-shadow .3s;}
+  .sw-route__dot:hover i{transform:scale(1.2);box-shadow:0 0 0 1.5px var(--sw-accent),0 1px 4px color-mix(in srgb,#000 22%,transparent);}
+  .sw-route__dot.is-active i{background:var(--sw-accent);transform:scale(1.3);box-shadow:0 0 0 1.5px var(--sw-accent),0 0 0 4px color-mix(in srgb,var(--sw-bg) 85%,#fff),0 2px 6px color-mix(in srgb,#000 25%,transparent);}
+  .sw-route__label{position:absolute;right:26px;top:50%;transform:translateY(-50%) translateX(6px);white-space:nowrap;font-family:var(--sw-font-display);font-weight:700;letter-spacing:.01em;font-size:.82rem;color:var(--sw-ink);background:color-mix(in srgb,var(--sw-bg) 90%,#fff);backdrop-filter:blur(6px);padding:6px 13px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;border:1px solid color-mix(in srgb,var(--sw-accent) 30%,transparent);box-shadow:0 2px 10px color-mix(in srgb,#000 10%,transparent);}
   .sw-route__dot:hover .sw-route__label,.sw-route__dot.is-active .sw-route__label{opacity:1;transform:translateY(-50%) translateX(0);}
+  .sw-nav--controls{padding:5px;gap:6px;}
+  .sw-nav__play{position:relative;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;background:transparent;transition:transform .2s,background .25s;}
+  .sw-nav__play:hover{transform:scale(1.06);background:var(--sw-accent);}
+  .sw-nav__play:hover .sw-nav__play-icon{border-color:transparent transparent transparent #fff;}
+  .sw-nav__play:hover .sw-nav__pause-icon::before,.sw-nav__play:hover .sw-nav__pause-icon::after{background:#fff;}
+  .sw-nav__play-icon{width:0;height:0;border-style:solid;border-width:6px 0 6px 10px;border-color:transparent transparent transparent var(--sw-ink);margin-left:2px;transition:border-color .2s;}
+  .sw-nav__pause-icon{display:none;position:relative;width:10px;height:12px;}
+  .sw-nav__pause-icon::before,.sw-nav__pause-icon::after{content:"";position:absolute;top:0;width:3px;height:12px;border-radius:1px;background:var(--sw-ink);transition:background .2s;}
+  .sw-nav__pause-icon::before{left:0;} .sw-nav__pause-icon::after{right:0;}
+  .sw-nav__play.is-playing .sw-nav__play-icon{display:none;}
+  .sw-nav__play.is-playing .sw-nav__pause-icon{display:block;}
   .sw-hint{position:fixed;left:50%;bottom:26px;z-index:30;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:10px;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;color:var(--sw-ink-soft);transition:opacity .3s;}
   .sw-hint i{width:22px;height:34px;border-radius:12px;border:2px solid color-mix(in srgb,var(--sw-ink) 28%,transparent);position:relative;}
   .sw-hint i::after{content:"";position:absolute;left:50%;top:7px;width:4px;height:7px;border-radius:2px;background:var(--sw-accent);transform:translateX(-50%);animation:sw-wheel 1.7s ease-in-out infinite;}
@@ -416,6 +533,7 @@ function injectCSS() {
   .sw-track{position:relative;z-index:1;width:100%;pointer-events:none;}
   @media (max-width:860px){
     .sw-nav{display:none;}
+    .sw-nav--controls{display:flex;}
     .sw-copylayer::before{width:100%;height:60%;top:auto;bottom:0;background:linear-gradient(0deg,var(--sw-bg) 8%,color-mix(in srgb,var(--sw-bg) 70%,transparent) 46%,transparent 100%);}
     /* Anchor copy to the bottom, clear of the home indicator / collapsing URL bar.
        dvh + env() are progressive: browsers that lack them keep the vh fallback line. */
