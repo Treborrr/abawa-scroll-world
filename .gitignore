@@ -16,3 +16,5 @@ build/final/frames/
 build/final/frames_v2/
 # Assets viejos reemplazados por webp/video — se archivan fuera de site/
 build/archived-superseded-assets/
+# Binario de Real-ESRGAN (se descarga, no se versiona)
+build/tools/

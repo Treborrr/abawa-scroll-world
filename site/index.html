@@ -51,44 +51,58 @@
   .sw-copylayer::before { transition: opacity .5s ease; }
   body.abawa-endgame .sw-copylayer::before { opacity: 0; }
 
-  /* Reveal final: splash de chocolate + cacaos generado a partir de la
-     tableta real (fal.ai, gpt-image-2/edit + Kling O3, frame-locked desde el
-     último cuadro de dive_7). Cubre la pantalla igual que las escenas del
-     motor (mismo object-position) para que el empalme con dive_7 no salte.
-     Se reproduce UNA vez al llegar; al terminar el <video> queda pausado en
-     su último cuadro y un shimmer de luz muy sutil le da vida perpetua sin
-     depender de que la persona siga scrolleando. */
-  /* z-25: por encima del copylayer del motor (z-20, cuyo velo lavaba el
-     lado izquierdo del splash) y por debajo del panel de cierre (z-30). */
+  /* Reveal final: splash de chocolate líquido que fragua en la tableta real
+     (foto DSC00710 recortada → assets/tableta_abawa.webp). Se dibuja en vivo
+     con SVG + la foto (ver abawa-reveal.js), sin video: nítido en cualquier
+     pantalla. Se reproduce UNA vez al aterrizar en el mármol (~1.4 s) y la
+     tableta queda flotando sobre la escena velada, con un brillo que la cruza. */
+  /* z-25: por encima del copylayer del motor (z-20) y por debajo del panel
+     de cierre (z-30). */
   #abawa-reveal {
     position: fixed; inset: 0; z-index: 25; pointer-events: none;
-    opacity: 0; transition: opacity .6s ease;
+    opacity: 0; transition: opacity .25s ease;
   }
   #abawa-reveal.visible { opacity: 1; }
-  #abawa-reveal video {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    object-fit: cover; object-position: center 42%;
+  #abawa-reveal .abawa-veil {
+    position: absolute; inset: 0; opacity: 0;
+    background: radial-gradient(ellipse at 50% 52%, #f0ebe3 30%, rgba(240,235,227,.7) 100%);
   }
-  /* Clickeable solo una vez visible — antes no hay nada que tocar. Click
-     reinicia el splash desde cero (ver JS), útil para volver a verlo. */
-  #abawa-reveal.visible video { pointer-events: auto; cursor: pointer; }
-  #abawa-reveal video.is-settled { animation: abawa-shimmer 7s ease-in-out infinite; }
-  @keyframes abawa-shimmer {
-    0%, 100% { filter: brightness(1) saturate(1); transform: scale(1); }
-    50%      { filter: brightness(1.035) saturate(1.05); transform: scale(1.006); }
+  #abawa-reveal .abawa-goo { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  /* Foto completa (las otras tabletas sobre la madera) que se abre alrededor
+     al terminar el splash. El fondo borroso rellena los costados en pantallas
+     anchas, donde la foto vertical no llega a cubrir. */
+  #abawa-reveal .abawa-photo-bg {
+    position: absolute; inset: -40px; opacity: 0;
+    background: #3a2a22 center / cover no-repeat; filter: blur(24px) brightness(.8);
   }
-  @media (max-width: 860px) and (orientation: portrait) {
-    #abawa-reveal video { object-position: center 44%; }
+  #abawa-reveal .abawa-photo {
+    position: absolute; opacity: 0;
+    -webkit-mask-composite: source-in; mask-composite: intersect;
+  }
+  #abawa-reveal .abawa-photo img { display: block; width: 100%; height: 100%; }
+  #abawa-reveal .abawa-bar {
+    position: absolute; opacity: 0; overflow: hidden;
+    box-shadow: 0 2.2vh 5vh -1.5vh rgba(58, 32, 22, calc(.45 * var(--abawa-shadow, 1))),
+                0 .6vh 1.4vh rgba(58, 32, 22, calc(.25 * var(--abawa-shadow, 1)));
+  }
+  #abawa-reveal .abawa-bar img { display: block; width: 100%; height: 100%; }
+  /* Clickeable solo una vez visible. Click → repite el splash. */
+  #abawa-reveal.visible .abawa-bar { pointer-events: auto; cursor: pointer; }
+  /* Brillo: una franja de luz cruza la tableta una vez al terminar el splash. */
+  #abawa-reveal .abawa-bar__shine {
+    position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+    background: linear-gradient(115deg, transparent 38%, rgba(255, 236, 214, .32) 50%, transparent 62%);
+    background-size: 260% 100%; background-position: 130% 0; opacity: 0;
+  }
+  #abawa-reveal .abawa-bar.is-shining .abawa-bar__shine { animation: abawa-shine 1.1s ease-in-out forwards; }
+  @keyframes abawa-shine {
+    0%   { opacity: 1; background-position: 130% 0; }
+    100% { opacity: 1; background-position: -30% 0; }
   }
   @media (prefers-reduced-motion: reduce) {
-    #abawa-reveal video.is-settled { animation: none; }
+    #abawa-reveal .abawa-bar.is-shining .abawa-bar__shine { animation: none; }
   }
 
-  /* Tramo de apreciación tras la pausa forzada: 1.5 pantallas de scroll
-     entre el final del vuelo y el panel de cierre, con el splash asentado
-     respirando (shimmer) todo el tramo. Ojo con las unidades: 60vh era 0.6
-     pantallas, no 60 — por eso el panel tapaba el splash casi al instante. */
-  #abawa-hold { height: 150vh; }
 
   /* Panel de cierre: página 9 del manual (logotipo sobre foto de mazorcas).
      Fluye después del film — al seguir bajando tras la tableta, sube y cubre
@@ -102,24 +116,37 @@
     display: block; width: 100%; height: 100%;
     object-fit: cover;
   }
+  /* En vertical el cover recortaba el logotipo: la lámina entra completa
+     (contain), centrada, sobre una copia desenfocada que rellena arriba y abajo.
+     La máscara funde sus bordes: la lámina es 16:9, así que mide 28.125vw de
+     alto a cada lado del centro antes del scale. */
+  @media (orientation: portrait) {
+    #abawa-final { overflow: hidden; }
+    #abawa-final::before {
+      content: ''; position: absolute; inset: -40px;
+      background: url('assets/manual-p9.webp') center / cover no-repeat;
+      filter: blur(22px) brightness(.85);
+    }
+    #abawa-final img {
+      position: relative; object-fit: contain; transform: scale(1.35);
+      -webkit-mask-image: linear-gradient(transparent calc(50% - 28vw), #000 calc(50% - 15vw), #000 calc(50% + 15vw), transparent calc(50% + 28vw));
+      mask-image: linear-gradient(transparent calc(50% - 28vw), #000 calc(50% - 15vw), #000 calc(50% + 15vw), transparent calc(50% + 28vw));
+    }
+  }
 </style>
 </head>
 <body>
   <div id="world"></div>
 
-  <div id="abawa-reveal" aria-hidden="true">
-    <video poster="assets/final_reveal_poster.webp"
-           muted playsinline preload="auto"
-           onerror="this.parentElement.remove()"></video>
-  </div>
+  <div id="abawa-reveal" aria-hidden="true"></div>
 
-  <div id="abawa-hold" aria-hidden="true"></div>
 
   <section id="abawa-final">
     <img src="assets/manual-p9.webp" alt="Abawa — chocolate fino de aroma">
   </section>
 
   <script src="scrub-engine.js"></script>
+  <script src="abawa-reveal.js"></script>
   <script>
     mountScrollWorld(document.getElementById('world'), {
       brand: { name: 'Abawa', href: '#top', logo: 'assets/brand/abawa-horizontal.webp' },
@@ -156,13 +183,13 @@
           still: 'assets/poster_5.webp', clip: 'assets/vid/dive_5.mp4', clipMobile: 'assets/vid/dive_5_m.mp4',
           accent: '#49403b',
           eyebrow: 'Fuego suave', title: 'El punto exacto.',
-          body: 'Tostado lento en tambor de barro, para que el origen se escuche en cada nota.',
+          body: 'Tostado lento, para que el origen se escuche en cada nota.',
           tags: ['Tueste artesanal'] },
         { id: 'taller', label: 'Taller',
           still: 'assets/poster_6.webp', clip: 'assets/vid/dive_6.mp4', clipMobile: 'assets/vid/dive_6_m.mp4',
           accent: '#9a8555',
-          eyebrow: 'Hecho a mano', title: 'Piedra, tiempo y paciencia.',
-          body: 'Molienda en piedra y temperado a mano, micro-lote a micro-lote.',
+          eyebrow: 'Hecho a mano', title: 'Amor, tiempo y paciencia.',
+          body: 'El cacao pasa por el molido, el refinado, el conchado, el temperado y el amoldado.',
           tags: ['Bean to bar'] },
         { id: 'abawa', label: 'Abawa',
           still: 'assets/poster_7.webp', clip: 'assets/vid/dive_7.mp4', clipMobile: 'assets/vid/dive_7_m.mp4',
@@ -187,38 +214,31 @@
     });
 
     // El splash final: al aterrizar en el mármol se reproduce UNA vez con el
-    // scroll bloqueado (pausa forzada: el clip entero + 2.5 s sobre el último
-    // cuadro, para que se aprecie la tableta) y recién ahí se libera; queda
-    // respirando con el shimmer durante el tramo de apreciación hasta que el
-    // panel de cierre lo cubre.
+    // scroll bloqueado (pausa forzada: el splash, la apertura de la foto y
+    // 0.9 s más para apreciarla) y recién ahí se libera; la tableta queda en pantalla durante
+    // el tramo de apreciación hasta que el panel de cierre la cubre.
     (function () {
       const wrap = document.getElementById('abawa-reveal');
-      const video = wrap && wrap.querySelector('video');
-      if (!wrap || !video) return;
-      const finalPanel = document.getElementById('abawa-final');
+      if (!wrap || !window.AbawaReveal) return;
       const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const isMobile = matchMedia('(hover: none) and (pointer: coarse)').matches ||
-        matchMedia('(max-width: 860px)').matches;
-      video.src = isMobile ? 'assets/vid/final_reveal_m.mp4' : 'assets/vid/final_reveal.mp4';
       let started = false, locked = false, lockY = 0, unlockTimer = null;
 
       function unlock() {
         locked = false;
         if (unlockTimer) { clearTimeout(unlockTimer); unlockTimer = null; }
       }
-      video.addEventListener('ended', () => {
-        video.classList.add('is-settled');
-        // La pausa forzada se extiende 2.5 s sobre el último cuadro.
-        if (locked) { clearTimeout(unlockTimer); unlockTimer = setTimeout(unlock, 2500); }
+      const reveal = AbawaReveal.mount(wrap, {
+        src: 'assets/tableta_abawa.webp',
+        photo: 'assets/tabletas_mesa.webp',
+        photoBlur: 'assets/tabletas_mesa_blur.webp',
+        onEnd: () => {
+          if (locked) { clearTimeout(unlockTimer); unlockTimer = setTimeout(unlock, 900); }
+        },
       });
 
-      // Click sobre la tableta/splash → repite la animación desde cero
-      // (solo clickeable una vez visible, ver CSS `.visible video`).
-      video.addEventListener('click', () => {
-        video.classList.remove('is-settled');
-        video.currentTime = 0;
-        video.play().catch(() => {});
-      });
+      // Click sobre la tableta → repite el splash desde cero
+      // (solo clickeable una vez visible, ver CSS `.visible .abawa-bar`).
+      wrap.addEventListener('click', () => reveal.play());
 
       function onScroll() {
         if (!document.body.contains(wrap)) { removeEventListener('scroll', onScroll); return; }
@@ -242,22 +262,26 @@
         // (el bug del scroll manual).
         if (!started && scrollY >= flightEnd - 0.1 * innerHeight) {
           started = true;
-          video.play().catch(() => {});
-          if (!reduce) {
+          if (reduce) {
+            reveal.finish();
+          } else {
+            reveal.play();
             locked = true;
             lockY = Math.round(flightEnd);
-            // Red de seguridad por si 'ended' nunca llega (clip que no carga).
-            unlockTimer = setTimeout(unlock, 12000);
+            // Red de seguridad por si onEnd nunca llega (pestaña en segundo plano).
+            unlockTimer = setTimeout(unlock, 4000);
           }
         }
         // Pausa forzada: mientras dura, el scroll no pasa del final del vuelo
         // (hacia arriba sí se puede salir; el lock no vuelve a activarse).
         if (locked && scrollY > lockY) scrollTo(0, lockY);
 
-        const distFromEnd = (flightEnd - scrollY) / innerHeight;
-        const panelVisible = finalPanel &&
-          finalPanel.getBoundingClientRect().top < innerHeight;
-        wrap.classList.toggle('visible', started && distFromEnd < 0.1 && !panelVisible);
+        // Pasado el final del vuelo, la foto deja de estar fija y sube con el
+        // scroll como contenido normal; el panel de cierre viene pegado justo
+        // debajo (sin tramo intermedio), así que nunca asoma el fondo crema.
+        const past = scrollY - flightEnd;
+        wrap.style.transform = past > 0 ? `translate3d(0, ${-past}px, 0)` : '';
+        wrap.classList.toggle('visible', started && past > -0.1 * innerHeight && past < innerHeight);
       }
       addEventListener('scroll', onScroll, { passive: true });
       onScroll();
