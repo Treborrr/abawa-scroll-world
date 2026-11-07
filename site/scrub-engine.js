@@ -69,6 +69,14 @@
      - (optional) mobile variants at ~720p, -g 4 for smoother phone scrubbing
    The engine loads each clip as a Blob (always seekable) and scrubs currentTime; it does
    NOT depend on HTTP byte-range support.
+
+   PHONE DECODER BUDGET (always on)
+     Phones allow only a handful of hardware video decoders at once. Blobs are fetched
+     for every nearby segment (nearest-first, `maxFetchMobile` at a time, default 2), but
+     a <video> element only exists for the current segment ± `liveRadius` (default 1);
+     the rest are detached and fall back to their still. A seek that stays pending for
+     >0.7 s is treated as a wedged decoder: re-issued once, then the <video> is rebuilt
+     from the cached blob.
    ========================================================================== */
 
 function mountScrollWorld(container, config) {
@@ -157,8 +165,9 @@ function mountScrollWorld(container, config) {
     const poster = (isMobile() && s.stillM) ? s.stillM : s.still;
     if (poster) img.src = poster;
     scene.appendChild(img); stage.appendChild(scene);
-    s.el = scene; s.img = img; s.video = null; s.hasClip = false;
+    s.el = scene; s.img = img; s.video = null; s.hasClip = false; s.blobUrl = null;
     s.loading = false; s.ready = false; s.cur = 0; s.target = 0; s.visible = false;
+    s.idx = SEGMENTS.indexOf(s); s.seekSince = 0; s.stalls = 0;
   });
 
   // per-section copy / route / nav
@@ -294,35 +303,94 @@ function mountScrollWorld(container, config) {
     window.scrollTo({ top: seg.start + (seg.end - seg.start) * 0.5, behavior: reduce ? 'auto' : 'smooth' });
   }
 
+  // ---- clip loading: download (blob) is decoupled from decoding (<video>) ----
+  // Phones cap the number of hardware video decoders alive at once (typically 2–4).
+  // The old code attached a <video> for every nearby segment and never let go, so
+  // from the second clip on the decoder never came up, `seeking` stuck true and the
+  // frame froze. Now: blobs are fetched for every nearby segment (cheap, just memory),
+  // but on a phone a <video> only exists for the current segment and its two
+  // neighbours (LIVE_RADIUS); anything further is detached and shows its still.
+  // Downloads are also queued nearest-first with a small concurrency so the clip
+  // you are actually looking at isn't starved by its neighbours.
+  const LIVE_RADIUS = (config.liveRadius != null) ? config.liveRadius : 1;
+  const MAX_FETCH_MOBILE = (config.maxFetchMobile != null) ? config.maxFetchMobile : 2;
+  let curSeg = 0, fetching = 0;
+  const fetchQueue = [];
+
   function loadClip(s) {
     // Under prefers-reduced-motion we never load the clips at all — the stills stay up
     // and simply cross-dissolve as you scroll. No scrubbed video motion, no decode cost.
     if (reduce || s.loading || !s.clip) return;
     s.loading = true;
-    // Serve the lighter mobile encode on phones when one was provided.
-    const url = (isMobile() && s.clipM) ? s.clipM : s.clip;
-    fetch(url).then(r => r.ok ? r.blob() : Promise.reject(new Error('404')))
-      .then(blob => {
-        const v = document.createElement('video');
-        v.className = 'sw-scene__video';
-        v.muted = true; v.playsInline = true; v.preload = 'auto';
-        v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
-        v.src = URL.createObjectURL(blob);
-        v.addEventListener('loadedmetadata', () => { s.ready = true; read(); });
-        // Reveal the video (hide the still poster) only once a real frame has
-        // painted — on iOS a seeked-but-never-played muted video stays blank, so
-        // hiding the still on metadata alone would flash an empty scene.
-        v.addEventListener('seeked', () => { s.el.classList.add('has-clip'); }, { once: true });
-        v.addEventListener('loadeddata', () => { try { v.pause(); } catch (e) {} if (userReady) primeVideo(v); });
-        s.el.appendChild(v); s.video = v; s.hasClip = true;
-      }).catch(() => { s.loading = false; });
+    fetchQueue.push(s);
+    pumpFetch();
   }
+
+  function pumpFetch() {
+    const max = isMobile() ? MAX_FETCH_MOBILE : Infinity;
+    while (fetching < max && fetchQueue.length) {
+      // nearest to the current segment first
+      let bi = 0;
+      for (let k = 1; k < fetchQueue.length; k++) {
+        if (Math.abs(fetchQueue[k].idx - curSeg) < Math.abs(fetchQueue[bi].idx - curSeg)) bi = k;
+      }
+      const s = fetchQueue.splice(bi, 1)[0];
+      fetching++;
+      // Serve the lighter mobile encode on phones when one was provided.
+      const url = (isMobile() && s.clipM) ? s.clipM : s.clip;
+      fetch(url).then(r => r.ok ? r.blob() : Promise.reject(new Error('404')))
+        .then(blob => { s.blobUrl = URL.createObjectURL(blob); syncLive(); })
+        .catch(() => { s.loading = false; })
+        .then(() => { fetching--; pumpFetch(); });
+    }
+  }
+
+  function wantLive(s) { return !isMobile() || Math.abs(s.idx - curSeg) <= LIVE_RADIUS; }
+
+  // Attach/detach <video> elements so that only the wanted segments hold a decoder.
+  function syncLive() {
+    // Detach first so the decoder is free before a neighbour claims it.
+    for (let i = 0; i < NSEG; i++) { const s = SEGMENTS[i]; if (s.video && !wantLive(s)) detachVideo(s); }
+    // Attach current first, then the neighbours.
+    const order = [];
+    for (let i = 0; i < NSEG; i++) order.push(SEGMENTS[i]);
+    order.sort((a, b) => Math.abs(a.idx - curSeg) - Math.abs(b.idx - curSeg));
+    order.forEach(s => { if (!s.video && s.blobUrl && wantLive(s)) attachVideo(s); });
+  }
+
+  function attachVideo(s) {
+    const v = document.createElement('video');
+    v.className = 'sw-scene__video';
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+    v.src = s.blobUrl;
+    v.addEventListener('loadedmetadata', () => { if (s.video === v) { s.ready = true; s.cur = s.target; read(); } });
+    // Reveal the video (hide the still poster) only once a real frame has
+    // painted — on iOS a seeked-but-never-played muted video stays blank, so
+    // hiding the still on metadata alone would flash an empty scene.
+    v.addEventListener('seeked', () => { if (s.video === v) s.el.classList.add('has-clip'); }, { once: true });
+    v.addEventListener('loadeddata', () => { try { v.pause(); } catch (e) {} primeVideo(v); });
+    v.addEventListener('error', () => { if (s.video === v) reattachVideo(s); });
+    s.el.appendChild(v); s.video = v; s.hasClip = true; s.ready = false;
+    s.seekSince = 0; s.stalls = 0;
+  }
+
+  function detachVideo(s) {
+    const v = s.video; if (!v) return;
+    s.video = null; s.hasClip = false; s.ready = false;
+    s.el.classList.remove('has-clip');
+    try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) {}
+    v.remove();
+  }
+
+  function reattachVideo(s) { detachVideo(s); if (s.blobUrl && wantLive(s)) attachVideo(s); }
 
   function read() {
     const y = window.scrollY || window.pageYOffset;
     const fade = CROSSFADE * vh;
     let ci = 0;
     for (let i = 0; i < NSEG; i++) if (y >= SEGMENTS[i].start) ci = i;
+    if (ci !== curSeg) { curSeg = ci; syncLive(); }
 
     for (let i = 0; i < NSEG; i++) {
       const s = SEGMENTS[i];
@@ -374,7 +442,8 @@ function mountScrollWorld(container, config) {
     ticking = false;
   }
 
-  function raf() {
+  const STALL_MS = 700;   // a seek older than this on a phone means the decoder is wedged
+  function raf(now) {
     const eps = isMobile() ? 0.02 : 0.008;   // coarser seek step on phones = fewer decodes
     for (let i = 0; i < NSEG; i++) {
       const s = SEGMENTS[i];
@@ -382,7 +451,19 @@ function mountScrollWorld(container, config) {
       // Never queue a seek while the decoder is still resolving the last one.
       // On phones a fast flick would otherwise pile up seeks and freeze the clip;
       // cur keeps lerping, so we snap to the latest target the moment it's free.
-      if (s.video.seeking) continue;
+      if (s.video.seeking) {
+        // Watchdog: a seek that never resolves is a wedged decoder (phone evicted it
+        // or never granted one). First strike: re-issue the seek. Second: rebuild the
+        // <video> from the cached blob so it claims a fresh decoder.
+        if (!s.seekSince) s.seekSince = now;
+        else if (now - s.seekSince > STALL_MS) {
+          s.seekSince = 0; s.stalls++;
+          if (s.stalls >= 2) { s.stalls = 0; reattachVideo(s); }
+          else { try { s.video.currentTime = clamp(s.target, 0, 0.999) * (s.video.duration || 1); } catch (e) {} }
+        }
+        continue;
+      }
+      s.seekSince = 0;
       if (!s.visible && Math.abs(s.cur - s.target) < 0.002) continue;
       s.cur += (s.target - s.cur) * (reduce ? 1 : 0.18);
       const dur = s.video.duration || 1;
@@ -399,13 +480,15 @@ function mountScrollWorld(container, config) {
   let userReady = false;
   function primeVideo(v) {
     if (!isMobile() || !v) return;
+    // Muted inline playback is allowed without a gesture on modern phones; when it
+    // isn't, the promise rejects harmlessly and onFirstGesture retries for the live set.
     try { const p = v.play(); if (p && p.then) p.then(() => { try { v.pause(); } catch (e) {} }).catch(() => {}); }
     catch (e) {}
   }
   function onFirstGesture() {
     if (userReady) return;
     userReady = true;
-    SEGMENTS.forEach(s => primeVideo(s.video));
+    SEGMENTS.forEach(s => { if (s.video) primeVideo(s.video); });
   }
   window.addEventListener('pointerdown', onFirstGesture, { once: true, passive: true });
   window.addEventListener('touchstart', onFirstGesture, { once: true, passive: true });

@@ -1,6 +1,9 @@
 #!/bin/bash
 # Amplía los 13 clips 720p de Kling a 1440p con Real-ESRGAN (realesr-animevideov3 x2, local)
 # y los codifica para scrubbing: escritorio 2560×1440 y móvil 1920×1080, GOP 8, sin unsharp.
+# OJO: las variantes móviles (*_m.mp4) que genera este script quedaron SUPERADAS por
+# build/encode_mobile.sh (720p, GOP 4, desde los 720p nativos). Si se vuelve a correr
+# este script, correr después encode_mobile.sh para no dejar los 1080p en el sitio.
 # Binario: build/tools/realesrgan (release v0.2.5.0 macOS de xinntao/Real-ESRGAN).
 set -u
 ROOT="$(cd "$(dirname "$0")" && pwd)"
