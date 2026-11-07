@@ -68,22 +68,9 @@
     background: radial-gradient(ellipse at 50% 52%, #f0ebe3 30%, rgba(240,235,227,.7) 100%);
   }
   #abawa-reveal .abawa-goo { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-  /* Foto completa (las otras tabletas sobre la madera) que se abre alrededor
-     al terminar el splash. El fondo borroso rellena los costados en pantallas
-     anchas, donde la foto vertical no llega a cubrir. */
-  #abawa-reveal .abawa-photo-bg {
-    position: absolute; inset: -40px; opacity: 0;
-    background: #3a2a22 center / cover no-repeat; filter: blur(24px) brightness(.8);
-  }
-  #abawa-reveal .abawa-photo {
-    position: absolute; opacity: 0;
-    -webkit-mask-composite: source-in; mask-composite: intersect;
-  }
-  #abawa-reveal .abawa-photo img { display: block; width: 100%; height: 100%; }
   #abawa-reveal .abawa-bar {
     position: absolute; opacity: 0; overflow: hidden;
-    box-shadow: 0 2.2vh 5vh -1.5vh rgba(58, 32, 22, calc(.45 * var(--abawa-shadow, 1))),
-                0 .6vh 1.4vh rgba(58, 32, 22, calc(.25 * var(--abawa-shadow, 1)));
+    box-shadow: 0 2.2vh 5vh -1.5vh rgba(58, 32, 22, .45), 0 .6vh 1.4vh rgba(58, 32, 22, .25);
   }
   #abawa-reveal .abawa-bar img { display: block; width: 100%; height: 100%; }
   /* Clickeable solo una vez visible. Click → repite el splash. */
@@ -193,7 +180,7 @@
           tags: ['Bean to bar'] },
         { id: 'abawa', label: 'Abawa',
           still: 'assets/poster_7.webp', clip: 'assets/vid/dive_7.mp4', clipMobile: 'assets/vid/dive_7_m.mp4',
-          scroll: 1.1, accent: '#49403b' },
+          scroll: 0.5, accent: '#49403b' },
       ],
       connectors: [
         'assets/vid/conn_1.mp4',
@@ -214,8 +201,8 @@
     });
 
     // El splash final: al aterrizar en el mármol se reproduce UNA vez con el
-    // scroll bloqueado (pausa forzada: el splash, la apertura de la foto y
-    // 0.9 s más para apreciarla) y recién ahí se libera; la tableta queda en pantalla durante
+    // scroll bloqueado (pausa forzada: el splash y 0.9 s más para
+    // apreciar la tableta) y recién ahí se libera; la tableta queda en pantalla durante
     // el tramo de apreciación hasta que el panel de cierre la cubre.
     (function () {
       const wrap = document.getElementById('abawa-reveal');
@@ -229,8 +216,6 @@
       }
       const reveal = AbawaReveal.mount(wrap, {
         src: 'assets/tableta_abawa.webp',
-        photo: 'assets/tabletas_mesa.webp',
-        photoBlur: 'assets/tabletas_mesa_blur.webp',
         onEnd: () => {
           if (locked) { clearTimeout(unlockTimer); unlockTimer = setTimeout(unlock, 900); }
         },
@@ -253,33 +238,45 @@
           : document.documentElement.scrollHeight - innerHeight;
 
         // El velo de los textos se retira durante todo el último dive — la
-        // escena del cacao no lleva copy (1.8 = su `scroll` en la config).
-        document.body.classList.toggle('abawa-endgame', scrollY > flightEnd - 1.8 * innerHeight);
+        // escena del mármol no lleva copy (0.5 = su `scroll` en la config).
+        document.body.classList.toggle('abawa-endgame', scrollY > flightEnd - 0.5 * innerHeight);
 
-        // Disparo: la PRIMERA vez que el scroll alcanza (o salta de largo) el
-        // final del vuelo. Sin condicionarlo al panel: un flick fuerte podía
-        // aterrizar con el panel ya asomando y el splash no arrancaba nunca
-        // (el bug del scroll manual).
-        if (!started && scrollY >= flightEnd - 0.1 * innerHeight) {
+        const past = scrollY - flightEnd;
+
+        // Si se vuelve a subir al vuelo, el splash se rearma: cada llegada a la
+        // mesa desde arriba lo reproduce de nuevo.
+        if (started && past < -0.1 * innerHeight) {
+          started = false;
+          unlock();
+          reveal.reset();
+        }
+
+        // Disparo: cada vez que el scroll alcanza (o salta de largo) el final
+        // del vuelo. Sin condicionarlo al panel: un flick fuerte podía aterrizar
+        // con el panel ya asomando y el splash no arrancaba nunca.
+        if (!started && past >= -0.1 * innerHeight) {
           started = true;
           if (reduce) {
             reveal.finish();
           } else {
             reveal.play();
-            locked = true;
-            lockY = Math.round(flightEnd);
-            // Red de seguridad por si onEnd nunca llega (pestaña en segundo plano).
-            unlockTimer = setTimeout(unlock, 4000);
+            // Pausa forzada solo si se llega desde arriba: si la página abre
+            // ya en el cierre (recarga), no hay que arrastrar a nadie hacia atrás.
+            if (past < 0.1 * innerHeight) {
+              locked = true;
+              lockY = Math.round(flightEnd);
+              // Red de seguridad por si onEnd nunca llega (pestaña en segundo plano).
+              unlockTimer = setTimeout(unlock, 4000);
+            }
           }
         }
         // Pausa forzada: mientras dura, el scroll no pasa del final del vuelo
-        // (hacia arriba sí se puede salir; el lock no vuelve a activarse).
+        // (hacia arriba sí se puede salir).
         if (locked && scrollY > lockY) scrollTo(0, lockY);
 
-        // Pasado el final del vuelo, la foto deja de estar fija y sube con el
+        // Pasado el final del vuelo, la tableta deja de estar fija y sube con el
         // scroll como contenido normal; el panel de cierre viene pegado justo
         // debajo (sin tramo intermedio), así que nunca asoma el fondo crema.
-        const past = scrollY - flightEnd;
         wrap.style.transform = past > 0 ? `translate3d(0, ${-past}px, 0)` : '';
         wrap.classList.toggle('visible', started && past > -0.1 * innerHeight && past < innerHeight);
       }

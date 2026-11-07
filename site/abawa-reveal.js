@@ -4,19 +4,13 @@
    - el chocolate es SVG con un filtro "goo" (blur + umbral de alfa) que funde los
      blobs como líquido, más una luz especular que le da brillo;
    - la tableta es la foto real recortada (assets/tableta_abawa.webp), que aparece
-     sobre el líquido como si se asentara en él;
-   - apenas fragua, alrededor se abre la foto completa (las otras tabletas sobre la
-     madera), alineada para que su tableta central caiga justo debajo de la recortada.
+     sobre el líquido como si se asentara en él.
 
-   Uso:  const r = AbawaReveal.mount(el, { src, photo, photoBlur, onEnd });  r.play();  r.renderAt(t);
+   Uso:  const r = AbawaReveal.mount(el, { src, onEnd });  r.play();  r.reset();  r.renderAt(t);
    `renderAt(t)` pinta el instante t (segundos) sin animar; sirve para QA. */
 (function () {
-  const SPLASH = 1.35;        // el líquido (s)
-  const DUR = 2.1;            // splash + apertura de la foto; el brillo final corre aparte
+  const DUR = 1.35;           // duración del splash (s); el brillo final corre aparte
   const BAR_RATIO = 1300 / 2714;
-  // Tableta central dentro de la foto original (DSC00710, 3767×5651): borde
-  // izquierdo y superior medios y ancho medio del cuadrilátero recortado.
-  const PHOTO = { w: 3767, h: 5651, barX: 1208.5, barY: 1544, barW: 1306.5 };
   const NS = 'http://www.w3.org/2000/svg';
 
   // PRNG con semilla: el splash es idéntico cada vez que se repite.
@@ -51,8 +45,6 @@
         </defs>
         <g filter="url(#abawa-goo-f)" fill="url(#abawa-choc)"></g>
       </svg>
-      <div class="abawa-photo-bg"></div>
-      <div class="abawa-photo"><img alt="" decoding="async"></div>
       <div class="abawa-bar">
         <img alt="" decoding="async">
         <i class="abawa-bar__shine"></i>
@@ -64,10 +56,6 @@
     const bar = root.querySelector('.abawa-bar');
     const img = bar.querySelector('img');
     img.src = opts.src;
-    const photoBg = root.querySelector('.abawa-photo-bg');
-    const photo = root.querySelector('.abawa-photo');
-    photo.querySelector('img').src = opts.photo;
-    photoBg.style.backgroundImage = `url("${opts.photoBlur}")`;
 
     // Geometría (px de viewport): la tableta centrada, más chica en vertical.
     let W, H, bw, bh, cx, cy, u;
@@ -84,11 +72,6 @@
         width: bw + 'px', height: bh + 'px',
         left: (cx - bw / 2) + 'px', top: (cy - bh / 2) + 'px',
         borderRadius: (bw * 0.0127) + 'px',
-      });
-      const s = bw / PHOTO.barW;
-      Object.assign(photo.style, {
-        width: PHOTO.w * s + 'px', height: PHOTO.h * s + 'px',
-        left: (cx - bw / 2 - PHOTO.barX * s) + 'px', top: (cy - bh / 2 - PHOTO.barY * s) + 'px',
       });
     }
 
@@ -141,7 +124,7 @@
       core.setAttribute('x', cx - cw / 2); core.setAttribute('y', cy - ch / 2);
       core.setAttribute('width', cw); core.setAttribute('height', ch);
       core.setAttribute('rx', rr); core.setAttribute('ry', rr);
-      const coreFade = 1 - seg(t, 1.1, SPLASH);
+      const coreFade = 1 - seg(t, 1.1, DUR);
       core.style.opacity = coreFade;
 
       // Brazos: salen disparados del impacto, se adelgazan hacia la punta y se
@@ -197,20 +180,6 @@
       bar.style.opacity = bi.toFixed(3);
       bar.style.transform = `scale(${(1.05 - 0.05 * bi).toFixed(4)})`;
       img.style.filter = bi < 1 ? `blur(${(6 * (1 - bi)).toFixed(2)}px)` : '';
-
-      // Apertura: la foto completa se abre en óvalo desde la tableta hacia afuera;
-      // la sombra flotante de la tableta se apaga porque ahora "apoya" en la mesa.
-      const op = easeInOut(seg(t, 1.1, DUR));
-      const reach = Math.hypot(W, H) * 1.2;
-      const rx = bw * 0.55 + (reach - bw * 0.55) * op, ry = bh * 0.55 + (reach - bh * 0.55) * op;
-      const px = cx - parseFloat(photo.style.left), py = cy - parseFloat(photo.style.top);
-      const pw = parseFloat(photo.style.width);
-      const edge = W > pw ? `, linear-gradient(to right, transparent, #000 7%, #000 93%, transparent)` : '';
-      const m = `radial-gradient(ellipse ${rx.toFixed(0)}px ${ry.toFixed(0)}px at ${px.toFixed(0)}px ${py.toFixed(0)}px, #000 55%, transparent 100%)${edge}`;
-      photo.style.webkitMaskImage = photo.style.maskImage = m;
-      photo.style.opacity = op > 0 ? Math.min(1, op * 4).toFixed(3) : '0';
-      photoBg.style.opacity = (0.9 * op).toFixed(3);
-      bar.style.setProperty('--abawa-shadow', (1 - op).toFixed(3));
     }
 
     let raf = 0, t0 = 0;
@@ -230,6 +199,11 @@
       t0 = performance.now();
       raf = requestAnimationFrame(frame);
     }
+    function reset() {                 // vuelve al estado previo al splash (invisible)
+      cancelAnimationFrame(raf); raf = 0; t0 = 0;
+      bar.classList.remove('is-shining');
+      layout(); renderAt(0);
+    }
     function finish() {                // estado final sin animar (reduced motion)
       cancelAnimationFrame(raf); raf = 0;
       layout(); renderAt(DUR);
@@ -237,7 +211,7 @@
 
     layout(); renderAt(0);
     addEventListener('resize', () => { layout(); if (!raf) renderAt(t0 ? DUR : 0); });
-    return { play, finish, renderAt: (t) => { layout(); renderAt(t); }, duration: DUR };
+    return { play, reset, finish, renderAt: (t) => { layout(); renderAt(t); }, duration: DUR };
   }
 
   window.AbawaReveal = { mount };
